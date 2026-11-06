@@ -167,7 +167,8 @@
                     }
 
                     /**
-                     * 拼平台跳转地址：保留已有 query，补登录态；失效域名场景附带新分享链供平台展示。
+                     * 拼平台跳转地址：参数写入 hash（/#/?...），对齐 uni-app H5 启动解析；
+                     * 补登录态；失效域名场景附带新分享链供平台展示。
                      *
                      * @param {string} link 落地校验返回的平台链接
                      * @param {{fromInvalidDomain?: boolean, redirectLink?: string}} extra 附加参数
@@ -175,16 +176,41 @@
                      */
                     function buildPlatformJumpUrl(link, extra) {
                         const url = new URL(link, window.location.href);
+                        // 1. 解析已有 hash query（#/?a=1 或 #/pages/x?a=1）；兼容旧版把参数放在 search 的链接
+                        let hashPath = '/';
+                        let hashQuery = '';
+                        if (url.hash && url.hash.length > 1) {
+                            const raw = url.hash.slice(1); // 去掉 #
+                            const qIdx = raw.indexOf('?');
+                            if (qIdx >= 0) {
+                                hashPath = raw.slice(0, qIdx) || '/';
+                                hashQuery = raw.slice(qIdx + 1);
+                            } else {
+                                hashPath = raw || '/';
+                            }
+                        }
+                        const params = new URLSearchParams(hashQuery);
+                        url.searchParams.forEach((value, key) => {
+                            if (!params.has(key)) {
+                                params.set(key, value);
+                            }
+                        });
+                        url.search = '';
+                        // 2. 补登录态与失效域名提示参数
                         if (accessToken) {
-                            url.searchParams.set('accessToken', accessToken);
+                            params.set('accessToken', accessToken);
                         }
                         if (refreshToken) {
-                            url.searchParams.set('refreshToken', refreshToken);
+                            params.set('refreshToken', refreshToken);
                         }
                         if (extra && extra.fromInvalidDomain && extra.redirectLink) {
-                            url.searchParams.set('fromInvalidDomain', '1');
-                            url.searchParams.set('redirectLink', extra.redirectLink);
+                            params.set('fromInvalidDomain', '1');
+                            params.set('redirectLink', extra.redirectLink);
                         }
+                        if (!hashPath.startsWith('/')) {
+                            hashPath = '/' + hashPath;
+                        }
+                        url.hash = hashPath + '?' + params.toString();
                         return url.toString();
                     }
 
